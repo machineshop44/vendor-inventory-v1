@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Vendor Inventory v1. Scan parts into inventory and scan them again when they are used.">
-  <title>Vendor Inventory v1</title>
+  <meta name="description" content="Vendor Inventory v1.3.1. Scan parts into inventory and scan them again when they are used.">
+  <title>Vendor Inventory v1.3.1</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23012169'/%3E%3Crect y='26' width='32' height='6' fill='%23e31837'/%3E%3C/svg%3E">
   <style>
 :root {
@@ -398,7 +398,7 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
 <body>
   <div id="app"></div>
   <script>
-const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.0' }
+const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.1' }
 const KEY = 'vendor-inventory-v1'
 const SITE_KEY = 'vendor-inventory-v1-site'
 const JSON_NAME = 'Vendor Inventory v1.json'
@@ -829,7 +829,7 @@ function printDocument(report, kind) {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Vendor Inventory v1 · ${esc(heading)}</title>
+  <title>Vendor Inventory v${APP.semver} · ${esc(heading)}</title>
   <style>
     body { margin: 24px; color: #1a1a1a; font-family: "Segoe UI", sans-serif; font-size: 16px; line-height: 1.4; }
     h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; }
@@ -843,7 +843,7 @@ function printDocument(report, kind) {
   </style>
 </head>
 <body>
-  <h1>Vendor Inventory v1</h1>
+  <h1>Vendor Inventory v${APP.semver}</h1>
   <h2>${esc(heading)}</h2>
   ${empty || `<p class="quiet">${esc(note)}</p>`}
   ${rows.length === 0 ? '' : `<table><thead><tr>
@@ -1202,9 +1202,9 @@ function render() {
       </nav>${ui.page === 'report' ? reportPage(site) : scanPage(site)}`
     : welcome()
   document.getElementById('app').innerHTML = `<div class="page">
-    <header class="topbar"><h1>${APP.displayName} <span>${APP.versionLabel}</span></h1><p class="semver">${APP.semver}</p></header>
+    <header class="topbar"><h1>${APP.displayName} <span>v${APP.semver}</span></h1></header>
     <main>${dataBar()}${body}</main>
-    <footer><div>${APP.displayName} ${APP.versionLabel} · ${APP.semver}</div><div>A refresh keeps the inventory in this browser. Export the data, or use the Excel file, to move it to another computer.</div></footer>
+    <footer><div>${APP.displayName} v${APP.semver}</div><div>A refresh keeps the inventory in this browser. Export the data, or use the Excel file, to move it to another computer.</div></footer>
   </div>`
   const next = focusId && document.getElementById(focusId)
   if (ui.focusTicket && document.getElementById('ticket')) {
@@ -1483,7 +1483,7 @@ document.addEventListener('click', (event) => {
     ui.sort = 'vendor'
     render()
   } else if (action === 'export') {
-    download('vendor-inventory-v1.json', `${JSON.stringify(exportPayload(), null, 2)}\n`, 'application/json')
+    download(`Vendor Inventory v${APP.semver}.json`, `${JSON.stringify(exportPayload(), null, 2)}\n`, 'application/json')
   } else if (action === 'choose-folder') {
     void chooseFolder()
   } else if (action === 'update-file') {
@@ -1507,8 +1507,8 @@ document.addEventListener('click', (event) => {
     const report = { month: ui.month, siteName, sort, rows }
     const kind = action === 'download-inventory' ? 'inventory' : 'month'
     const filename = kind === 'inventory'
-      ? `vendor-inventory-v1-on-hand-${name || 'site'}-${ui.month}.html`
-      : `vendor-inventory-v1-${name || 'site'}-${ui.month}.html`
+      ? `Vendor Inventory v${APP.semver} on hand ${name || 'site'} ${ui.month}.html`
+      : `Vendor Inventory v${APP.semver} ${name || 'site'} ${ui.month}.html`
     download(filename, printDocument(report, kind), 'text/html;charset=utf-8')
   } else if (action === 'print') {
     window.print()
@@ -1713,7 +1713,7 @@ async function linkSavedFolder() {
   }
 }
 
-document.title = `${APP.displayName} ${APP.versionLabel}`
+document.title = `${APP.displayName} v${APP.semver}`
 render()
 void linkSavedFolder()
 

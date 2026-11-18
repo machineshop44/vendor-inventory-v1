@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +28,8 @@ import {
 } from './db.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const build = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version
+const buildName = `Vendor Inventory v${build}`
 const prod = process.argv.includes('--prod')
 const port = 8787
 
@@ -94,7 +97,7 @@ app.post('/api/inventory/remove', send((req) => removeInventory(req.body?.siteId
 app.get('/api/export', send((_req, res) => {
   const data = exportData()
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="vendor-inventory-v1.json"')
+  res.setHeader('Content-Disposition', `attachment; filename="${buildName}.json"`)
   res.send(`${JSON.stringify(data, null, 2)}\n`)
 }))
 
@@ -167,7 +170,7 @@ function shareUrls(listenPort) {
 }
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log('Vendor Inventory v1')
+  console.log(buildName)
   for (const url of shareUrls(port)) console.log(`  ${url}`)
   console.log(`Database               ${dbPath}`)
   console.log(`Excel copy             ${sheetPath}`)

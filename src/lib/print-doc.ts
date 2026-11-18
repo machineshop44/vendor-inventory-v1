@@ -1,5 +1,6 @@
 import { formatMonth } from './format.ts'
 import type { Report } from './types.ts'
+import { APP_TITLE } from './version.ts'
 
 function esc(value: string | number) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -34,7 +35,7 @@ export function downloadPrint(report: Report, kind: 'inventory' | 'month') {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Vendor Inventory v1 · ${esc(heading)}</title>
+  <title>${APP_TITLE} · ${esc(heading)}</title>
   <style>
     body { margin: 24px; color: #1a1a1a; font-family: "Segoe UI", sans-serif; font-size: 16px; line-height: 1.4; }
     h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; letter-spacing: -0.03em; }
@@ -48,7 +49,7 @@ export function downloadPrint(report: Report, kind: 'inventory' | 'month') {
   </style>
 </head>
 <body>
-  <h1>Vendor Inventory v1</h1>
+  <h1>${APP_TITLE}</h1>
   <h2>${esc(heading)}</h2>
   ${empty || `<p class="quiet">${esc(note)}</p>`}
   ${rows.length === 0 ? '' : `<table>
@@ -65,8 +66,8 @@ export function downloadPrint(report: Report, kind: 'inventory' | 'month') {
 `
   const slug = report.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'site'
   const filename = kind === 'inventory'
-    ? `vendor-inventory-v1-on-hand-${slug}-${report.month}.html`
-    : `vendor-inventory-v1-${slug}-${report.month}.html`
+    ? `${APP_TITLE} on hand ${slug} ${report.month}.html`
+    : `${APP_TITLE} ${slug} ${report.month}.html`
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

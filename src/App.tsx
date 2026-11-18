@@ -113,8 +113,7 @@ export default function App() {
   return (
     <div className="page">
       <header className="topbar">
-        <h1>{APP.displayName} <span>{APP.versionLabel}</span></h1>
-        <p className="semver">{APP.semver}</p>
+        <h1>{APP.displayName} <span>v{APP.semver}</span></h1>
       </header>
       <main>
         {status === 'loading' && <p className="quiet">Opening the inventory…</p>}
@@ -136,7 +135,7 @@ export default function App() {
         )}
       </main>
       <footer>
-        <div>{APP_TITLE} · {APP.semver}</div>
+        <div>{APP_TITLE}</div>
         {shareUrls.length > 0 && (
           <div>Other computers on this Wi-Fi open {shareUrls.join('  ')}</div>
         )}
@@ -217,7 +216,7 @@ function DataBar({ hasData, onImport }: { hasData: boolean, onImport: (data: unk
     <div className="data-bar no-print">
       <a className="btn ghost" href="/api/export">Export data</a>
       <button type="button" className="btn ghost" onClick={() => inputRef.current?.click()}>Import data</button>
-      <a className="btn ghost" href="/vendor-inventory-v1.html" download="Vendor Inventory v1.html">Download app</a>
+      <a className="btn ghost" href="/vendor-inventory-v1.html" download={`${APP_TITLE}.html`}>Download app</a>
       <input
         ref={inputRef}
         className="file-input"
