@@ -340,6 +340,8 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 }
 
 .edit-part { display: flex; flex-direction: column; gap: 10px; }
+.ticket-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 12px 0; }
+.ticket-form .field { min-width: 220px; }
 
 .report-head {
   display: flex;
@@ -395,7 +397,7 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
 <body>
   <div id="app"></div>
   <script>
-const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.1.0' }
+const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.2.0' }
 const KEY = 'vendor-inventory-v1'
 const SITE_KEY = 'vendor-inventory-v1-site'
 
@@ -419,6 +421,9 @@ const ui = {
   error: '',
   formError: '',
   welcomeName: '',
+  ticket: '',
+  ticketNote: '',
+  focusTicket: false,
 }
 
 let db = loadDb()
@@ -536,7 +541,7 @@ function doScan({ siteId, barcode, direction, description, vendor, model, putBac
     const modelName = clip(model, 80)
     if (!desc || !vend) return { code: 'need_details' }
     const item = { id: nextId(db.items), barcode: code, description: desc, model: modelName, vendor: vend, unit: 'each', createdAt: nowLocal() }
-    const movement = { id: nextId(db.movements), siteId: site.id, itemId: item.id, direction: 'in', qty: 1, scannedAt: nowLocal() }
+    const movement = { id: nextId(db.movements), siteId: site.id, itemId: item.id, direction: 'in', qty: 1, scannedAt: nowLocal(), ticket: '' }
     db.items.push(item)
     db.movements.push(movement)
     save()
@@ -551,7 +556,7 @@ function doScan({ siteId, barcode, direction, description, vendor, model, putBac
     if (places.length > 0) return { error: `This barcode is in inventory at ${places[0].name}.` }
     return { error: 'This barcode is already out of inventory.' }
   }
-  const movement = { id: nextId(db.movements), siteId: site.id, itemId: existing.id, direction, qty: 1, scannedAt: nowLocal() }
+  const movement = { id: nextId(db.movements), siteId: site.id, itemId: existing.id, direction, qty: 1, scannedAt: nowLocal(), ticket: '' }
   db.movements.push(movement)
   save()
   return { scan: scanResult(site, existing, movement) }
@@ -796,30 +801,47 @@ function reportRows(siteId, month) {
   return rows
 }
 
-function csvText(value) {
-  return `"${String(value ?? '').replaceAll('"', '""')}"`
-}
-
-function csvBarcode(value) {
-  return `"=""${String(value ?? '').replaceAll('"', '""')}"""`
-}
-
-function inventoryCsv(siteId, sort) {
-  const rows = sortRows(inventoryRows(siteId), sort)
-  const lines = [[ 'Site', 'Vendor', 'Model', 'Barcode', 'Description', 'On hand' ].map(csvText).join(',')]
-  for (const row of rows) {
-    lines.push([csvText(row.site), csvText(row.vendor), csvText(row.model), csvBarcode(row.barcode), csvText(row.description), row.onHand].join(','))
-  }
-  return `\uFEFF${lines.join('\r\n')}\r\n`
-}
-
-function reportCsv(siteId, month, sort) {
-  const rows = sortRows(reportRows(siteId, month), sort)
-  const lines = [[ 'Site', 'Vendor', 'Model', 'Barcode', 'Description', 'Started with', 'Received', 'Used', 'On hand' ].map(csvText).join(',')]
-  for (const row of rows) {
-    lines.push([csvText(row.site), csvText(row.vendor), csvText(row.model), csvBarcode(row.barcode), csvText(row.description), row.startOnHand, row.received, row.used, row.endOnHand].join(','))
-  }
-  return `\uFEFF${lines.join('\r\n')}\r\n`
+function printDocument(report, kind) {
+  const rows = kind === 'inventory' ? report.rows.filter((row) => row.endOnHand !== 0) : report.rows
+  const heading = `${formatMonth(report.month)} · ${report.siteName}`
+  const organized = report.sort === 'description' ? 'description' : 'vendor name'
+  const note = `${heading} · ${rows.length} lines · Organized by ${organized}`
+  const body = rows.map((row) => `<tr>
+    <td>${esc(row.site)}</td><td>${esc(row.vendor)}</td><td>${esc(row.model)}</td>
+    <td class="mono">${esc(row.barcode)}</td><td>${esc(row.description)}</td>
+    <td class="num">${row.startOnHand}</td><td class="num">${row.received}</td><td class="num">${row.used}</td><td class="num">${row.endOnHand}</td>
+  </tr>`).join('')
+  const empty = rows.length === 0
+    ? `<p class="empty">Nothing was on hand and nothing moved in ${esc(formatMonth(report.month))} at ${esc(report.siteName)}.</p>`
+    : ''
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vendor Inventory v1 · ${esc(heading)}</title>
+  <style>
+    body { margin: 24px; color: #1a1a1a; font-family: "Segoe UI", sans-serif; font-size: 16px; line-height: 1.4; }
+    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; }
+    h2 { margin: 0 0 8px; font-size: 22px; font-weight: 650; }
+    .quiet, .empty { color: #5c6570; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #d5d8de; text-align: left; vertical-align: baseline; }
+    th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5c6570; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: Consolas, "Cascadia Mono", monospace; }
+    .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  </style>
+</head>
+<body>
+  <h1>Vendor Inventory v1</h1>
+  <h2>${esc(heading)}</h2>
+  ${empty || `<p class="quiet">${esc(note)}</p>`}
+  ${rows.length === 0 ? '' : `<table><thead><tr>
+    <th>Site</th><th>Vendor</th><th>Model</th><th>Barcode</th><th>Description</th>
+    <th class="num">Started with</th><th class="num">Received</th><th class="num">Used</th><th class="num">On hand</th>
+  </tr></thead><tbody>${body}</tbody></table>`}
+</body>
+</html>
+`
 }
 
 function download(filename, text, type) {
@@ -857,6 +879,7 @@ function exportPayload() {
       direction: row.direction,
       qty: row.qty,
       scannedAt: row.scannedAt,
+      ticket: row.direction === 'out' ? (row.ticket || '') : '',
     })),
   }
 }
@@ -913,7 +936,15 @@ function readImport(payload) {
     if (!Number.isInteger(qty) || qty <= 0) return { error: 'That file has a scan that cannot be read.' }
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(scannedAt)) return { error: 'That file has a scan that cannot be read.' }
     movementIds.add(id)
-    movements.push({ id, siteId, itemId, direction, qty, scannedAt })
+    movements.push({
+      id,
+      siteId,
+      itemId,
+      direction,
+      qty,
+      scannedAt,
+      ticket: direction === 'out' ? clip(typeof row.ticket === 'string' ? row.ticket : '', 40) : '',
+    })
   }
   return { data: { app: 'Vendor Inventory', versionLabel: 'v1', semver: APP.semver, exportedAt: nowLocal(), sites, items, movements } }
 }
@@ -993,6 +1024,11 @@ function resultBlock() {
       <p class="result-meta">${esc(scan.item.vendor)}${scan.item.model ? ` · ${esc(scan.item.model)}` : ''}</p>
       <p class="mono">${esc(scan.item.barcode)}</p>
       <p class="eyebrow">${added ? 'In inventory at' : 'Taken out of'} ${esc(scan.siteName)}</p>
+      ${added ? '' : `<form class="ticket-form" data-action="save-ticket">
+        <label class="field"><span>Ticket # used on</span><input id="ticket" value="${esc(ui.ticket)}" maxlength="40" placeholder="Optional"></label>
+        <button class="btn ghost" type="submit">Save ticket</button>
+        ${ui.ticketNote ? `<p class="hint">${esc(ui.ticketNote)}</p>` : ''}
+      </form>`}
       <button type="button" class="btn ghost" data-action="undo">Undo this scan</button>
     </section>`
   }
@@ -1051,7 +1087,7 @@ function shelfBlock(site) {
   const groups = groupProducts(visible)
   const canClear = rows.length > 0 || latest.length > 0
   const latestHtml = latest.length === 0 ? '' : `<section class="latest"><h2>Last scans at ${esc(site.name)}</h2><ul>
-    ${latest.map((row) => `<li><span class="pill ${row.direction}">${row.direction === 'in' ? 'In' : 'Out'}</span><span><strong>${esc(row.description)}</strong><small>${esc(row.vendor)}</small></span><time>${esc(formatWhen(row.scannedAt))}</time></li>`).join('')}
+    ${latest.map((row) => `<li><span class="pill ${row.direction}">${row.direction === 'in' ? 'In' : 'Out'}</span><span><strong>${esc(row.description)}</strong><small>${esc(row.vendor)}${row.ticket ? ` · Ticket ${esc(row.ticket)}` : ''}</small></span><time>${esc(formatWhen(row.scannedAt))}</time></li>`).join('')}
   </ul></section>`
   const clearHtml = ui.clearing ? `<div class="new-part"><h2>Clear the inventory at ${esc(site.name)}?</h2><p>The site stays. Every scan at this site is removed.</p>
     <div class="row-actions"><button type="button" class="btn danger" data-action="confirm-clear">Clear inventory</button><button type="button" class="btn ghost" data-action="cancel-clear">Cancel</button></div></div>` : ''
@@ -1157,6 +1193,11 @@ function render() {
     <footer><div>${APP.displayName} ${APP.versionLabel} · ${APP.semver}</div><div>This file keeps the inventory in this browser. Export the data to move it to another computer.</div></footer>
   </div>`
   const next = focusId && document.getElementById(focusId)
+  if (ui.focusTicket && document.getElementById('ticket')) {
+    document.getElementById('ticket').focus()
+    ui.focusTicket = false
+    return
+  }
   const prefer = document.getElementById('part-description')
     || document.getElementById('edit-description')
     || document.getElementById('site-name')
@@ -1168,7 +1209,7 @@ function render() {
     if (pos != null && next.setSelectionRange) {
       try { next.setSelectionRange(pos, pos) } catch { /* Some inputs cannot place a caret. */ }
     }
-  } else if (site && ui.page === 'scan' && ui.result.kind !== 'need_details' && ui.result.kind !== 'confirm_return') {
+  } else if (site && ui.page === 'scan' && ui.result.kind !== 'need_details' && ui.result.kind !== 'confirm_return' && !(ui.result.kind === 'ok' && ui.result.scan.direction === 'out')) {
     document.getElementById('barcode')?.focus()
   }
 }
@@ -1195,6 +1236,7 @@ document.addEventListener('input', (event) => {
   else if (el.id === 'edit-vendor' && ui.edit) ui.edit.vendor = el.value
   else if (el.id === 'site-name' && ui.editor) ui.editor.name = el.value
   else if (el.id === 'welcome-name') ui.welcomeName = el.value
+  else if (el.id === 'ticket') ui.ticket = el.value
   else if (el.id === 'find') {
     ui.query = el.value
     render()
@@ -1282,8 +1324,19 @@ document.addEventListener('submit', (event) => {
       beep('bad')
     } else {
       ui.result = { kind: 'ok', scan: result.scan }
+      ui.ticket = ''
+      ui.ticketNote = ''
+      ui.focusTicket = result.scan.direction === 'out'
       beep(result.scan.direction)
     }
+    render()
+  } else if (action === 'save-ticket' && ui.result.kind === 'ok' && ui.result.scan.direction === 'out') {
+    rememberText('ticket', (value) => { ui.ticket = value })
+    const mov = db.movements.find((row) => row.id === ui.result.scan.movementId)
+    if (!mov) { ui.ticketNote = 'That scan is already undone.'; render(); return }
+    mov.ticket = clip(ui.ticket, 40)
+    save()
+    ui.ticketNote = mov.ticket ? `Saved ticket ${mov.ticket}` : 'No ticket number saved.'
     render()
   } else if (action === 'save-part') {
     rememberText('part-description', (value) => { ui.fields.description = value })
@@ -1431,8 +1484,14 @@ document.addEventListener('click', (event) => {
     const sort = allSites ? 'vendor' : (ui.sort === 'description' ? 'description' : 'vendor')
     const siteId = allSites ? null : scope
     const name = allSites ? 'all-sites' : (db.sites.find((item) => item.id === siteId)?.name || 'site').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    if (action === 'download-inventory') download(`vendor-inventory-v1-${name || 'site'}.csv`, inventoryCsv(siteId, sort), 'text/csv;charset=utf-8')
-    else download(`vendor-inventory-v1-${ui.month}.csv`, reportCsv(siteId, ui.month, sort), 'text/csv;charset=utf-8')
+    const rows = sortRows(reportRows(siteId, ui.month), sort)
+    const siteName = allSites ? 'All sites' : (db.sites.find((item) => item.id === siteId)?.name || 'Site')
+    const report = { month: ui.month, siteName, sort, rows }
+    const kind = action === 'download-inventory' ? 'inventory' : 'month'
+    const filename = kind === 'inventory'
+      ? `vendor-inventory-v1-on-hand-${name || 'site'}-${ui.month}.html`
+      : `vendor-inventory-v1-${name || 'site'}-${ui.month}.html`
+    download(filename, printDocument(report, kind), 'text/html;charset=utf-8')
   } else if (action === 'print') {
     window.print()
   }

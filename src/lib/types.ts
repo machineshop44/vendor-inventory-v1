@@ -32,6 +32,7 @@ export type ActivityRow = {
   barcode: string
   description: string
   vendor: string
+  ticket: string
 }
 
 export type SiteView = {

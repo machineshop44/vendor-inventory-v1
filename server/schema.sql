@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS movements (
   item_id INTEGER NOT NULL REFERENCES items(id),
   direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
   qty INTEGER NOT NULL CHECK (qty > 0),
-  scanned_at TEXT NOT NULL
+  scanned_at TEXT NOT NULL,
+  ticket TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_movements_site_item ON movements (site_id, item_id);

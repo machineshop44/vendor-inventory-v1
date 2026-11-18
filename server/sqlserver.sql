@@ -28,6 +28,7 @@ CREATE TABLE dbo.Movements (
   Direction NVARCHAR(3) NOT NULL,
   Qty INT NOT NULL,
   ScannedAt DATETIME2 NOT NULL CONSTRAINT DF_Movements_ScannedAt DEFAULT SYSUTCDATETIME(),
+  Ticket NVARCHAR(40) NOT NULL CONSTRAINT DF_Movements_Ticket DEFAULT N'',
   CONSTRAINT CK_Movements_Direction CHECK (Direction IN (N'in', N'out')),
   CONSTRAINT CK_Movements_Qty CHECK (Qty > 0)
 );

@@ -17,6 +17,7 @@ import {
   report,
   reportCsv,
   scan,
+  setTicket,
   siteView,
   undo,
   updateItem,
@@ -91,6 +92,8 @@ app.get('/api/site-view', send((req) => siteView(req.query.siteId)))
 app.post('/api/scan', send((req) => scan(req.body ?? {})))
 
 app.post('/api/undo', send((req) => undo(req.body?.movementId)))
+
+app.patch('/api/movements/:id', send((req) => setTicket(req.params.id, req.body?.ticket)))
 
 app.patch('/api/items/:id', send((req) => updateItem(req.params.id, req.body ?? {})))
 

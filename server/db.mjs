@@ -20,6 +20,11 @@ if (!itemColumns.some((column) => column.name === 'model')) {
   db.exec("ALTER TABLE items ADD COLUMN model TEXT NOT NULL DEFAULT ''")
 }
 
+const movementColumns = db.prepare('PRAGMA table_info(movements)').all()
+if (!movementColumns.some((column) => column.name === 'ticket')) {
+  db.exec("ALTER TABLE movements ADD COLUMN ticket TEXT NOT NULL DEFAULT ''")
+}
+
 export class HttpError extends Error {
   constructor(status, message, code, extra) {
     super(message)
@@ -189,7 +194,7 @@ export function exportData() {
   return {
     app: 'Vendor Inventory',
     versionLabel: 'v1',
-    semver: '1.1.0',
+    semver: '1.2.0',
     exportedAt: nowLocal(),
     sites: db.prepare('SELECT id, name, created_at FROM sites ORDER BY id').all().map((row) => ({
       id: row.id,
@@ -206,7 +211,7 @@ export function exportData() {
         unit: row.unit,
         createdAt: row.created_at,
       })),
-    movements: db.prepare('SELECT id, site_id, item_id, direction, qty, scanned_at FROM movements ORDER BY id').all()
+    movements: db.prepare('SELECT id, site_id, item_id, direction, qty, scanned_at, ticket FROM movements ORDER BY id').all()
       .map((row) => ({
         id: row.id,
         siteId: row.site_id,
@@ -214,6 +219,7 @@ export function exportData() {
         direction: row.direction,
         qty: row.qty,
         scannedAt: row.scanned_at,
+        ticket: row.ticket ?? '',
       })),
   }
 }
@@ -281,7 +287,10 @@ export function importData(payload) {
       throw new HttpError(400, 'That file has a scan that cannot be read.')
     }
     movementIds.add(id)
-    movements.push({ id, siteId, itemId, direction, qty, scannedAt })
+    const ticket = direction === 'out'
+      ? cleanText(typeof row?.ticket === 'string' ? row.ticket : '', 40, 'Ticket number')
+      : ''
+    movements.push({ id, siteId, itemId, direction, qty, scannedAt, ticket })
   }
 
   return transaction(() => {
@@ -298,11 +307,11 @@ export function importData(payload) {
       insertItem.run(item.id, item.barcode, item.description, item.model, item.vendor, item.unit, item.createdAt)
     }
     const insertMove = db.prepare(`
-      INSERT INTO movements (id, site_id, item_id, direction, qty, scanned_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO movements (id, site_id, item_id, direction, qty, scanned_at, ticket)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `)
     for (const move of movements) {
-      insertMove.run(move.id, move.siteId, move.itemId, move.direction, move.qty, move.scannedAt)
+      insertMove.run(move.id, move.siteId, move.itemId, move.direction, move.qty, move.scannedAt, move.ticket)
     }
     return { sites: sites.length, items: items.length, movements: movements.length }
   })
@@ -348,7 +357,7 @@ export function siteView(siteId) {
       || a.description.localeCompare(b.description, undefined, { sensitivity: 'base' }))
 
   const latest = db.prepare(`
-    SELECT m.id, m.direction, m.qty, m.scanned_at, i.barcode, i.description, i.vendor
+    SELECT m.id, m.direction, m.qty, m.scanned_at, m.ticket, i.barcode, i.description, i.vendor
     FROM movements m
     JOIN items i ON i.id = m.item_id
     WHERE m.site_id = ?
@@ -362,6 +371,7 @@ export function siteView(siteId) {
     barcode: row.barcode,
     description: row.description,
     vendor: row.vendor,
+    ticket: row.ticket ?? '',
   }))
 
   return { site: { id: site.id, name: site.name }, shelf, latest }
@@ -497,6 +507,17 @@ export function undo(movementId) {
       },
     }
   })
+}
+
+export function setTicket(movementId, ticket) {
+  const id = Number(movementId)
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(404, 'That scan is already undone.')
+  const mov = db.prepare('SELECT id, direction FROM movements WHERE id = ?').get(id)
+  if (!mov) throw new HttpError(404, 'That scan is already undone.')
+  if (mov.direction !== 'out') throw new HttpError(400, 'A ticket number is only for a part taken out.')
+  const clean = cleanText(typeof ticket === 'string' ? ticket : '', 40, 'Ticket number')
+  db.prepare('UPDATE movements SET ticket = ? WHERE id = ?').run(clean, id)
+  return { id, ticket: clean }
 }
 
 export function updateItem(itemId, { description, vendor, model }) {

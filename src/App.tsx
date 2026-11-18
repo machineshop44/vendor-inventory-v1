@@ -3,6 +3,7 @@ import { ApiError, api } from './lib/api.ts'
 import { beep } from './lib/beep.ts'
 import { currentMonth, formatMonth, formatWhen } from './lib/format.ts'
 import type { Item, Mode, Report, ScanResult, ShelfRow, Site, SiteView, UndoResult } from './lib/types.ts'
+import { downloadPrint } from './lib/print-doc.ts'
 import { APP, APP_TITLE } from './lib/version.ts'
 
 const SITE_KEY = 'vendor-inventory-v1-site'
@@ -420,6 +421,7 @@ function ScanPage({ site }: { site: Site }) {
 
   useEffect(() => {
     if (result.kind === 'need_details' || result.kind === 'confirm_return') return
+    if (result.kind === 'ok' && result.scan.direction === 'out') return
     barcodeRef.current?.focus()
   }, [result.kind, site.id])
 
@@ -619,6 +621,9 @@ function ScanPage({ site }: { site: Site }) {
             <p className="result-meta">{result.scan.item.vendor}{result.scan.item.model ? ` · ${result.scan.item.model}` : ''}</p>
             <p className="mono">{result.scan.item.barcode}</p>
             <p className="eyebrow">{result.scan.direction === 'in' ? 'In inventory at' : 'Taken out of'} {result.scan.siteName}</p>
+            {result.scan.direction === 'out' && (
+              <TicketForm movementId={result.scan.movementId} onSaved={() => setRefreshKey((key) => key + 1)} />
+            )}
             <button type="button" className="btn ghost" onClick={onUndo} disabled={busy}>Undo this scan</button>
           </section>
         )}
@@ -670,7 +675,7 @@ function ScanPage({ site }: { site: Site }) {
                 <span className={`pill ${row.direction}`}>{row.direction === 'in' ? 'In' : 'Out'}</span>
                 <span>
                   <strong>{row.description}</strong>
-                  <small>{row.vendor}</small>
+                  <small>{row.vendor}{row.ticket ? ` · Ticket ${row.ticket}` : ''}</small>
                 </span>
                 <time>{formatWhen(row.scannedAt)}</time>
               </li>
@@ -1012,16 +1017,47 @@ function EditPart({
   )
 }
 
-function inventoryQuery(siteId: number | null, sort: string) {
-  const query = new URLSearchParams({ sort })
-  if (siteId != null) query.set('siteId', String(siteId))
-  return query.toString()
-}
+function TicketForm({ movementId, onSaved }: { movementId: number, onSaved: () => void }) {
+  const [ticket, setTicket] = useState('')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-function reportQuery(month: string, siteId: number | null, sort: string) {
-  const query = new URLSearchParams({ month, sort })
-  if (siteId != null) query.set('siteId', String(siteId))
-  return query.toString()
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await api<{ ticket: string }>(`/api/movements/${movementId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ticket }),
+      })
+      setNote(saved.ticket ? `Saved ticket ${saved.ticket}` : 'No ticket number saved.')
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The ticket number was not saved.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="ticket-form" onSubmit={save}>
+      <label className="field">
+        <span>Ticket # used on</span>
+        <input
+          value={ticket}
+          onChange={(event) => setTicket(event.target.value)}
+          maxLength={40}
+          placeholder="Optional"
+          autoFocus
+        />
+      </label>
+      <button className="btn ghost" type="submit" disabled={busy}>Save ticket</button>
+      {note && <p className="hint">{note}</p>}
+      {error && <p className="form-error">{error}</p>}
+    </form>
+  )
 }
 
 function ReportPage({ site, sites }: { site: Site, sites: Site[] }) {
@@ -1094,8 +1130,8 @@ function ReportPage({ site, sites }: { site: Site, sites: Site[] }) {
               <option value="description">Description</option>
             </select>
           </label>
-          <a className="btn ghost" href={`/api/inventory.csv?${inventoryQuery(scopeId, sortMode)}`}>Download inventory</a>
-          <a className="btn ghost" href={`/api/report.csv?${reportQuery(month, scopeId, sortMode)}`}>Download month</a>
+          <button type="button" className="btn ghost" disabled={!data} onClick={() => data && downloadPrint(data, 'inventory')}>Download inventory</button>
+          <button type="button" className="btn ghost" disabled={!data} onClick={() => data && downloadPrint(data, 'month')}>Download month</button>
           <button type="button" className="btn ghost" onClick={() => window.print()}>Print</button>
         </div>
       </div>
