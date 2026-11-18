@@ -186,6 +186,13 @@ function DataBar({ hasData, onImport }: { hasData: boolean, onImport: (data: unk
   const [error, setError] = useState('')
   const [pending, setPending] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
+  const [sheetPath, setSheetPath] = useState('')
+
+  useEffect(() => {
+    api<{ sheet: string }>('/api/data-file')
+      .then((info) => setSheetPath(info.sheet))
+      .catch(() => setSheetPath(''))
+  }, [])
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -241,6 +248,10 @@ function DataBar({ hasData, onImport }: { hasData: boolean, onImport: (data: unk
         </div>
       )}
       {error && <p className="form-error">{error}</p>}
+      <p className="file-note">
+        Every scan is saved on this computer. A refresh keeps the list.
+        {sheetPath ? ` Excel copy: ${sheetPath}` : ''}
+      </p>
     </div>
   )
 }

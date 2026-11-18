@@ -2,12 +2,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import { DATA_JSON, DATA_SHEET, workbookXml } from './workbook.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dataDir = path.join(root, 'data')
 fs.mkdirSync(dataDir, { recursive: true })
 
 export const dbPath = path.join(dataDir, 'inventory.db')
+export const jsonPath = path.join(dataDir, DATA_JSON)
+export const sheetPath = path.join(dataDir, DATA_SHEET)
 
 const db = new DatabaseSync(dbPath)
 db.exec('PRAGMA foreign_keys = ON')
@@ -194,7 +197,7 @@ export function exportData() {
   return {
     app: 'Vendor Inventory',
     versionLabel: 'v1',
-    semver: '1.2.0',
+    semver: '1.3.0',
     exportedAt: nowLocal(),
     sites: db.prepare('SELECT id, name, created_at FROM sites ORDER BY id').all().map((row) => ({
       id: row.id,
@@ -692,4 +695,40 @@ export function reportCsv(query) {
     ].join(',')),
   ]
   return `\uFEFF${lines.join('\r\n')}\r\n`
+}
+
+export function saveDataFiles() {
+  const data = exportData()
+  const json = `${JSON.stringify(data, null, 2)}\n`
+  const sheet = workbookXml(data)
+  const jsonTemp = `${jsonPath}.tmp`
+  const sheetTemp = `${sheetPath}.tmp`
+  fs.writeFileSync(jsonTemp, json)
+  fs.writeFileSync(sheetTemp, sheet)
+  fs.rmSync(jsonPath, { force: true })
+  fs.rmSync(sheetPath, { force: true })
+  fs.renameSync(jsonTemp, jsonPath)
+  fs.renameSync(sheetTemp, sheetPath)
+}
+
+function restoreDataFile() {
+  const count = db.prepare('SELECT COUNT(*) AS n FROM sites').get()
+  if (Number(count.n) > 0 || !fs.existsSync(jsonPath)) return
+  try {
+    const payload = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+    if (!Array.isArray(payload?.sites) || payload.sites.length === 0) return
+    importData(payload)
+    console.log(`Restored inventory from ${jsonPath}`)
+  } catch (err) {
+    console.error(`The data file was not loaded: ${jsonPath}`)
+    console.error(err)
+  }
+}
+
+restoreDataFile()
+try {
+  saveDataFiles()
+} catch (err) {
+  console.error('The Excel copy was not written.')
+  console.error(err)
 }

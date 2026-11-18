@@ -11,6 +11,9 @@ import {
   deleteSite,
   exportData,
   importData,
+  jsonPath,
+  saveDataFiles,
+  sheetPath,
   renameSite,
   inventoryCsv,
   removeInventory,
@@ -27,10 +30,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const prod = process.argv.includes('--prod')
 const port = 8787
 
-function send(handler) {
+function send(handler, options = {}) {
   return (req, res) => {
     try {
       const result = handler(req, res)
+      if (options.persist) {
+        try {
+          saveDataFiles()
+        } catch (err) {
+          console.error('The Excel copy was not updated.')
+          console.error(err)
+        }
+      }
       if (!res.headersSent) res.json(result ?? null)
     } catch (err) {
       if (err instanceof HttpError) {
@@ -68,15 +79,17 @@ app.get('/api/share', send(() => ({ urls: shareUrls(port).filter((url) => !url.i
 
 app.get('/api/sites', send(() => listSites()))
 
-app.post('/api/sites', send((req) => createSite(req.body?.name)))
+app.get('/api/data-file', send(() => ({ folder: path.dirname(sheetPath), json: jsonPath, sheet: sheetPath })))
 
-app.patch('/api/sites/:id', send((req) => renameSite(req.params.id, req.body?.name)))
+app.post('/api/sites', send((req) => createSite(req.body?.name), { persist: true }))
 
-app.delete('/api/sites/:id', send((req) => deleteSite(req.params.id)))
+app.patch('/api/sites/:id', send((req) => renameSite(req.params.id, req.body?.name), { persist: true }))
 
-app.post('/api/sites/:id/clear', send((req) => clearInventory(req.params.id)))
+app.delete('/api/sites/:id', send((req) => deleteSite(req.params.id), { persist: true }))
 
-app.post('/api/inventory/remove', send((req) => removeInventory(req.body?.siteId, req.body?.itemIds)))
+app.post('/api/sites/:id/clear', send((req) => clearInventory(req.params.id), { persist: true }))
+
+app.post('/api/inventory/remove', send((req) => removeInventory(req.body?.siteId, req.body?.itemIds), { persist: true }))
 
 app.get('/api/export', send((_req, res) => {
   const data = exportData()
@@ -85,17 +98,17 @@ app.get('/api/export', send((_req, res) => {
   res.send(`${JSON.stringify(data, null, 2)}\n`)
 }))
 
-app.post('/api/import', send((req) => importData(req.body)))
+app.post('/api/import', send((req) => importData(req.body), { persist: true }))
 
 app.get('/api/site-view', send((req) => siteView(req.query.siteId)))
 
-app.post('/api/scan', send((req) => scan(req.body ?? {})))
+app.post('/api/scan', send((req) => scan(req.body ?? {}), { persist: true }))
 
-app.post('/api/undo', send((req) => undo(req.body?.movementId)))
+app.post('/api/undo', send((req) => undo(req.body?.movementId), { persist: true }))
 
-app.patch('/api/movements/:id', send((req) => setTicket(req.params.id, req.body?.ticket)))
+app.patch('/api/movements/:id', send((req) => setTicket(req.params.id, req.body?.ticket), { persist: true }))
 
-app.patch('/api/items/:id', send((req) => updateItem(req.params.id, req.body ?? {})))
+app.patch('/api/items/:id', send((req) => updateItem(req.params.id, req.body ?? {}), { persist: true }))
 
 app.get('/vendor-inventory-v1.html', (_req, res) => {
   res.sendFile(path.join(root, 'Vendor Inventory v1.html'))
@@ -157,6 +170,7 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log('Vendor Inventory v1')
   for (const url of shareUrls(port)) console.log(`  ${url}`)
   console.log(`Database               ${dbPath}`)
+  console.log(`Excel copy             ${sheetPath}`)
 })
 
 server.on('error', (err) => {

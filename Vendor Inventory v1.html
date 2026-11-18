@@ -143,6 +143,7 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 .btn.danger { background: var(--bad); border-color: var(--bad); color: white; }
 
 .data-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+.file-note { width: 100%; margin: 0; color: var(--muted); font-size: 14px; }
 .confirm-line { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; width: 100%; }
 .confirm-line p { margin: 0; flex: 1 1 240px; }
 
@@ -397,9 +398,16 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
 <body>
   <div id="app"></div>
   <script>
-const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.2.0' }
+const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.0' }
 const KEY = 'vendor-inventory-v1'
 const SITE_KEY = 'vendor-inventory-v1-site'
+const JSON_NAME = 'Vendor Inventory v1.json'
+const SHEET_NAME = 'Vendor Inventory v1.xls'
+const FILE_READY = 'Saved in this browser and in Vendor Inventory v1.xls in the folder you picked. A refresh keeps every scan.'
+const FILE_BROWSER = 'Saved in this browser. A refresh keeps every scan. Choose a folder to also keep an Excel file.'
+const FILE_EXPORT = 'Saved in this browser. A refresh keeps every scan. Use Export data to copy the list to another computer.'
+const FILE_UPDATE = 'Saved in this browser. A refresh keeps every scan. Click Update Excel file to write the sheet.'
+let fileFolder = null
 
 const ui = {
   page: 'scan',
@@ -424,6 +432,8 @@ const ui = {
   ticket: '',
   ticketNote: '',
   focusTicket: false,
+  fileNote: typeof window.showDirectoryPicker === 'function' ? FILE_BROWSER : FILE_EXPORT,
+  fileAction: typeof window.showDirectoryPicker === 'function' ? 'choose' : '',
 }
 
 let db = loadDb()
@@ -448,6 +458,7 @@ function save() {
   db.semver = APP.semver
   localStorage.setItem(KEY, JSON.stringify(db))
   if (ui.siteId != null) localStorage.setItem(SITE_KEY, String(ui.siteId))
+  void mirrorFolder()
 }
 
 function nowLocal() {
@@ -979,6 +990,9 @@ function dataBar() {
   return `<div class="data-bar no-print">
     <button type="button" class="btn ghost" data-action="export">Export data</button>
     <button type="button" class="btn ghost" data-action="pick-import">Import data</button>
+    ${ui.fileAction === 'choose' || ui.fileAction === 'change' ? `<button type="button" class="btn ghost" data-action="choose-folder">${ui.fileAction === 'change' ? 'Change save folder' : 'Choose save folder'}</button>` : ''}
+    ${ui.fileAction === 'update' ? '<button type="button" class="btn ghost" data-action="update-file">Update Excel file</button>' : ''}
+    <p class="file-note">${esc(ui.fileNote)}</p>
     <input id="import-file" type="file" accept="application/json,.json" hidden>
     ${ui.pendingImport ? `<div class="confirm-line"><p>${hasData ? 'Replace the inventory on this computer with this file?' : 'Load the inventory from this file?'}</p>
       <button type="button" class="btn danger" data-action="confirm-import">${hasData ? 'Replace inventory' : 'Import'}</button>
@@ -1190,7 +1204,7 @@ function render() {
   document.getElementById('app').innerHTML = `<div class="page">
     <header class="topbar"><h1>${APP.displayName} <span>${APP.versionLabel}</span></h1><p class="semver">${APP.semver}</p></header>
     <main>${dataBar()}${body}</main>
-    <footer><div>${APP.displayName} ${APP.versionLabel} · ${APP.semver}</div><div>This file keeps the inventory in this browser. Export the data to move it to another computer.</div></footer>
+    <footer><div>${APP.displayName} ${APP.versionLabel} · ${APP.semver}</div><div>A refresh keeps the inventory in this browser. Export the data, or use the Excel file, to move it to another computer.</div></footer>
   </div>`
   const next = focusId && document.getElementById(focusId)
   if (ui.focusTicket && document.getElementById('ticket')) {
@@ -1470,6 +1484,10 @@ document.addEventListener('click', (event) => {
     render()
   } else if (action === 'export') {
     download('vendor-inventory-v1.json', `${JSON.stringify(exportPayload(), null, 2)}\n`, 'application/json')
+  } else if (action === 'choose-folder') {
+    void chooseFolder()
+  } else if (action === 'update-file') {
+    void updateFolder()
   } else if (action === 'pick-import') {
     document.getElementById('import-file')?.click()
   } else if (action === 'cancel-import') {
@@ -1497,8 +1515,207 @@ document.addEventListener('click', (event) => {
   }
 })
 
+function xmlText(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch]))
+}
+
+function sheetCell(value, kind) {
+  if (kind === 'number' && Number.isFinite(Number(value))) return `<Cell><Data ss:Type="Number">${Number(value)}</Data></Cell>`
+  return `<Cell><Data ss:Type="String">${xmlText(value)}</Data></Cell>`
+}
+
+function sheet(name, headers, rows) {
+  const head = `<Row>${headers.map((header) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${xmlText(header)}</Data></Cell>`).join('')}</Row>`
+  const body = rows.map((row) => `<Row>${row.map((entry) => sheetCell(entry.value, entry.kind)).join('')}</Row>`).join('')
+  return `<Worksheet ss:Name="${xmlText(name)}"><Table>${head}${body}</Table></Worksheet>`
+}
+
+function workbookXml(data) {
+  const sites = new Map((data.sites || []).map((site) => [site.id, site.name]))
+  const items = new Map((data.items || []).map((item) => [item.id, item]))
+  const onHand = new Map()
+  for (const move of data.movements || []) {
+    const qty = Number(move.qty) || 0
+    onHand.set(`${move.siteId}:${move.itemId}`, (onHand.get(`${move.siteId}:${move.itemId}`) || 0) + (move.direction === 'in' ? qty : -qty))
+  }
+  const shelf = []
+  for (const [key, qty] of onHand) {
+    if (qty === 0) continue
+    const [siteId, itemId] = key.split(':').map(Number)
+    const item = items.get(itemId)
+    if (!item) continue
+    shelf.push({ site: sites.get(siteId) || '', vendor: item.vendor || '', model: item.model || '', barcode: item.barcode || '', description: item.description || '', onHand: qty })
+  }
+  shelf.sort((a, b) => a.vendor.localeCompare(b.vendor, undefined, { sensitivity: 'base' }) || a.site.localeCompare(b.site, undefined, { sensitivity: 'base' }) || a.description.localeCompare(b.description, undefined, { sensitivity: 'base' }) || String(a.barcode).localeCompare(String(b.barcode)))
+  const scans = (data.movements || []).map((move) => {
+    const item = items.get(move.itemId) || {}
+    return { when: move.scannedAt || '', site: sites.get(move.siteId) || '', direction: move.direction === 'out' ? 'Out' : 'In', vendor: item.vendor || '', model: item.model || '', barcode: item.barcode || '', description: item.description || '', qty: Number(move.qty) || 0, ticket: move.ticket || '' }
+  }).sort((a, b) => a.site.localeCompare(b.site, undefined, { sensitivity: 'base' }) || a.vendor.localeCompare(b.vendor, undefined, { sensitivity: 'base' }) || String(a.when).localeCompare(String(b.when)) || String(a.barcode).localeCompare(String(b.barcode)))
+  const itemRows = (data.items || []).slice().sort((a, b) => String(a.vendor).localeCompare(String(b.vendor), undefined, { sensitivity: 'base' }) || String(a.description).localeCompare(String(b.description), undefined, { sensitivity: 'base' }) || String(a.barcode).localeCompare(String(b.barcode)))
+  const siteRows = (data.sites || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }))
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="Header"><Font ss:Bold="1"/></Style></Styles>
+${sheet('On hand', ['Site', 'Vendor', 'Model', 'Barcode', 'Description', 'On hand'], shelf.map((row) => [{ value: row.site }, { value: row.vendor }, { value: row.model }, { value: row.barcode }, { value: row.description }, { value: row.onHand, kind: 'number' }]))}
+${sheet('Scans', ['When', 'Site', 'Direction', 'Vendor', 'Model', 'Barcode', 'Description', 'Qty', 'Ticket'], scans.map((row) => [{ value: row.when }, { value: row.site }, { value: row.direction }, { value: row.vendor }, { value: row.model }, { value: row.barcode }, { value: row.description }, { value: row.qty, kind: 'number' }, { value: row.ticket }]))}
+${sheet('Items', ['Barcode', 'Description', 'Model', 'Vendor'], itemRows.map((row) => [{ value: row.barcode }, { value: row.description }, { value: row.model || '' }, { value: row.vendor }]))}
+${sheet('Sites', ['Site'], siteRows.map((row) => [{ value: row.name }]))}
+</Workbook>
+`
+}
+
+function openStore() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('vendor-inventory-v1-files', 1)
+    request.onupgradeneeded = () => request.result.createObjectStore('handles')
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function storeFolder(handle) {
+  return openStore().then((database) => new Promise((resolve, reject) => {
+    const tx = database.transaction('handles', 'readwrite')
+    tx.objectStore('handles').put(handle, 'folder')
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  }))
+}
+
+function loadFolder() {
+  return openStore().then((database) => new Promise((resolve, reject) => {
+    const request = database.transaction('handles', 'readonly').objectStore('handles').get('folder')
+    request.onsuccess = () => resolve(request.result || null)
+    request.onerror = () => reject(request.error)
+  }))
+}
+
+async function writeNamed(dir, name, contents) {
+  const handle = await dir.getFileHandle(name, { create: true })
+  const stream = await handle.createWritable()
+  await stream.write(contents)
+  await stream.close()
+}
+
+async function writeFolderFiles() {
+  if (!fileFolder) return
+  const perm = await fileFolder.queryPermission({ mode: 'readwrite' })
+  if (perm !== 'granted') return
+  const payload = exportPayload()
+  await writeNamed(fileFolder, JSON_NAME, `${JSON.stringify(payload, null, 2)}\n`)
+  await writeNamed(fileFolder, SHEET_NAME, workbookXml(payload))
+}
+
+async function pullFolderIfNewer() {
+  let text = ''
+  try {
+    const handle = await fileFolder.getFileHandle(JSON_NAME)
+    text = await (await handle.getFile()).text()
+  } catch {
+    return
+  }
+  let payload
+  try { payload = JSON.parse(text) } catch { return }
+  const read = readImport(payload)
+  if (read.error) return
+  const fileTime = typeof payload.exportedAt === 'string' ? payload.exportedAt : ''
+  const localTime = db.exportedAt || ''
+  if ((read.data.sites.length > 0 && db.sites.length === 0) || (fileTime && fileTime > localTime)) {
+    db = read.data
+    db.exportedAt = fileTime || db.exportedAt
+    if (!db.sites.some((site) => site.id === ui.siteId)) ui.siteId = db.sites[0]?.id ?? null
+    localStorage.setItem(KEY, JSON.stringify(db))
+    if (ui.siteId != null) localStorage.setItem(SITE_KEY, String(ui.siteId))
+  }
+}
+
+function showFileStatus(action, note) {
+  if (ui.fileAction === action && ui.fileNote === note) return
+  ui.fileAction = action
+  ui.fileNote = note
+  render()
+}
+
+async function adoptFolder() {
+  await pullFolderIfNewer()
+  await writeFolderFiles()
+  showFileStatus('change', FILE_READY)
+}
+
+async function chooseFolder() {
+  if (typeof window.showDirectoryPicker !== 'function') return
+  try {
+    try {
+      fileFolder = await window.showDirectoryPicker({ id: 'vendor-inventory-v1', mode: 'readwrite', startIn: 'documents' })
+    } catch (err) {
+      if (err && err.name === 'AbortError') return
+      fileFolder = await window.showDirectoryPicker({ id: 'vendor-inventory-v1', mode: 'readwrite' })
+    }
+    await storeFolder(fileFolder)
+    await adoptFolder()
+  } catch (err) {
+    if (err && err.name === 'AbortError') return
+    ui.error = 'That folder was not used. The list is still saved in this browser.'
+    render()
+  }
+}
+
+async function updateFolder() {
+  if (!fileFolder) return chooseFolder()
+  try {
+    const perm = await fileFolder.requestPermission({ mode: 'readwrite' })
+    if (perm !== 'granted') return
+    await adoptFolder()
+  } catch (err) {
+    if (err && err.name === 'AbortError') return
+    ui.error = 'The Excel file was not updated. The list is still saved in this browser.'
+    render()
+  }
+}
+
+async function mirrorFolder() {
+  try {
+    await writeFolderFiles()
+  } catch {
+    showFileStatus('update', FILE_UPDATE)
+  }
+}
+
+async function linkSavedFolder() {
+  if (typeof window.showDirectoryPicker !== 'function' || !window.indexedDB) {
+    showFileStatus('', FILE_EXPORT)
+    return
+  }
+  try {
+    fileFolder = await loadFolder()
+  } catch {
+    fileFolder = null
+  }
+  if (!fileFolder) {
+    showFileStatus('choose', FILE_BROWSER)
+    return
+  }
+  let perm = 'prompt'
+  try { perm = await fileFolder.queryPermission({ mode: 'readwrite' }) } catch { perm = 'prompt' }
+  if (perm !== 'granted') {
+    showFileStatus('update', FILE_UPDATE)
+    return
+  }
+  try {
+    await pullFolderIfNewer()
+    await writeFolderFiles()
+    showFileStatus('change', FILE_READY)
+  } catch {
+    showFileStatus('update', FILE_UPDATE)
+  }
+}
+
 document.title = `${APP.displayName} ${APP.versionLabel}`
 render()
+void linkSavedFolder()
 
   </script>
 </body>

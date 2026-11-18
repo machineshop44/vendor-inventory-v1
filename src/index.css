@@ -134,6 +134,7 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 .btn.danger { background: var(--bad); border-color: var(--bad); color: white; }
 
 .data-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+.file-note { width: 100%; margin: 0; color: var(--muted); font-size: 14px; }
 .confirm-line { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; width: 100%; }
 .confirm-line p { margin: 0; flex: 1 1 240px; }
 
