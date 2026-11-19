@@ -141,6 +141,15 @@ export function listSites() {
     .map((row) => ({ id: row.id, name: row.name }))
 }
 
+export function listVendors() {
+  return db.prepare(`
+    SELECT vendor FROM items
+    WHERE vendor <> ''
+    GROUP BY vendor COLLATE NOCASE
+    ORDER BY vendor COLLATE NOCASE
+  `).all().map((row) => row.vendor)
+}
+
 export function createSite(name) {
   const clean = cleanText(name, 60, 'Site name')
   if (!clean) throw new HttpError(400, 'Enter a site name.')
@@ -221,7 +230,7 @@ export function exportData() {
   return {
     app: 'Vendor Inventory',
     versionLabel: 'v1',
-    semver: '1.3.2',
+    semver: '1.3.3',
     exportedAt: nowLocal(),
     sites: db.prepare('SELECT id, name, created_at FROM sites ORDER BY id').all().map((row) => ({
       id: row.id,

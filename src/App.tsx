@@ -709,6 +709,75 @@ function ScanPage({ site }: { site: Site }) {
   )
 }
 
+function VendorField({ value, onChange }: { value: string, onChange: (value: string) => void }) {
+  const [vendors, setVendors] = useState<string[]>([])
+  const [ready, setReady] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const initialVendor = useRef(value)
+
+  useEffect(() => {
+    const starting = initialVendor.current.trim()
+    api<string[]>('/api/vendors')
+      .then((list) => {
+        setVendors(list)
+        const known = list.some((name) => name.toLowerCase() === starting.toLowerCase())
+        if (starting && !known) setAdding(true)
+      })
+      .catch(() => setVendors([]))
+      .finally(() => setReady(true))
+  }, [])
+
+  useEffect(() => {
+    if (adding) inputRef.current?.focus()
+  }, [adding])
+
+  if (!ready || vendors.length === 0) {
+    return (
+      <label className="field">
+        <span>Vendor</span>
+        <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={120} placeholder="Vendor name" />
+      </label>
+    )
+  }
+
+  const selected = adding
+    ? '__new__'
+    : (vendors.find((name) => name.toLowerCase() === value.trim().toLowerCase()) ?? '')
+
+  return (
+    <label className="field">
+      <span>Vendor</span>
+      <select
+        value={selected}
+        onChange={(event) => {
+          if (event.target.value === '__new__') {
+            setAdding(true)
+            onChange('')
+            return
+          }
+          setAdding(false)
+          onChange(event.target.value)
+        }}
+      >
+        <option value="">Choose a vendor</option>
+        {vendors.map((name) => <option key={name.toLowerCase()} value={name}>{name}</option>)}
+        <option value="__new__">Add new vendor</option>
+      </select>
+      {adding && (
+        <input
+          ref={inputRef}
+          className="vendor-new"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          maxLength={120}
+          placeholder="New vendor name"
+        />
+      )}
+    </label>
+  )
+}
+
 function NewPartForm({
   barcode,
   onSave,
@@ -754,10 +823,7 @@ function NewPartForm({
         <span>Model number</span>
         <input value={model} onChange={(event) => setModel(event.target.value)} maxLength={80} />
       </label>
-      <label className="field">
-        <span>Vendor</span>
-        <input value={vendor} onChange={(event) => setVendor(event.target.value)} maxLength={120} />
-      </label>
+      <VendorField value={vendor} onChange={setVendor} />
       {error && <p className="form-error">{error}</p>}
       <div className="row-actions">
         <button className="btn receive" type="submit" disabled={busy}>Save and add to inventory</button>
@@ -802,11 +868,9 @@ function Shelf({
         <div>
           <h2>On hand at {siteName}</h2>
           {canClear && (
-            <div className="row-actions downloads">
-              <button type="button" className="btn ghost" onClick={() => { setClearing(true); setRemoving(null); setActionError('') }}>
-                Clear inventory
-              </button>
-            </div>
+            <button type="button" className="link warn" onClick={() => { setClearing(true); setRemoving(null); setActionError('') }}>
+              Clear inventory
+            </button>
           )}
         </div>
         {rows.length > 0 && (
@@ -1016,10 +1080,7 @@ function EditPart({
         <span>Model number</span>
         <input value={model} onChange={(event) => setModel(event.target.value)} maxLength={80} />
       </label>
-      <label className="field">
-        <span>Vendor</span>
-        <input value={vendor} onChange={(event) => setVendor(event.target.value)} maxLength={120} />
-      </label>
+      <VendorField value={vendor} onChange={setVendor} />
       {error && <p className="form-error">{error}</p>}
       <div className="row-actions">
         <button className="btn" type="submit" disabled={busy}>Save</button>

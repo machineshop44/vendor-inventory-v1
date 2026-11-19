@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Vendor Inventory v1.3.2. Scan parts into inventory and scan them again when they are used.">
-  <title>Vendor Inventory v1.3.2</title>
+  <meta name="description" content="Vendor Inventory v1.3.3. Scan parts into inventory and scan them again when they are used.">
+  <title>Vendor Inventory v1.3.3</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23012169'/%3E%3Crect y='26' width='32' height='6' fill='%23e31837'/%3E%3C/svg%3E">
   <style>
 :root {
@@ -123,13 +123,14 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 }
 
 .btn {
-  border: 2px solid var(--navy);
+  border: 1px solid var(--navy);
   background: var(--navy);
   color: white;
   border-radius: 4px;
-  min-height: 46px;
-  padding: 0 16px;
-  font-weight: 650;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 14px;
+  font-weight: 600;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -188,14 +189,14 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 }
 
 .mode-btn {
-  min-height: 76px;
+  min-height: 52px;
   border-radius: 4px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: transparent;
   text-align: left;
-  padding: 12px 14px;
-  font-size: 22px;
-  font-weight: 700;
+  padding: 8px 12px;
+  font-size: 16px;
+  font-weight: 650;
 }
 
 .mode-btn small {
@@ -230,13 +231,13 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 
 .barcode-input {
   font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 28px;
-  height: 72px;
-  padding: 0 14px;
+  font-size: 22px;
+  height: 46px;
+  padding: 0 12px;
 }
 
-.qty-field input { height: 72px; font-size: 28px; text-align: center; }
-.btn-scan { height: 72px; white-space: nowrap; }
+.qty-field input { height: 46px; font-size: 22px; text-align: center; }
+.btn-scan { height: 46px; min-height: 46px; padding: 0 14px; white-space: nowrap; }
 
 .mono { font-family: Consolas, "Cascadia Mono", monospace; }
 
@@ -339,6 +340,8 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
   text-decoration: underline;
   font-size: 13px;
 }
+.link.warn { color: var(--bad); }
+.vendor-new { margin-top: 8px; }
 
 .edit-part { display: flex; flex-direction: column; gap: 10px; }
 .ticket-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 12px 0; }
@@ -377,7 +380,7 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
   .mode, .scan-row, .latest li { grid-template-columns: 1fr; }
   .shelf-head, .report-head, .site-pick, .site-edit { display: flex; flex-direction: column; align-items: stretch; }
   .topbar h1 { font-size: 22px; }
-  .btn-scan, .barcode-input, .qty-field input { height: 64px; }
+  .btn-scan, .barcode-input, .qty-field input { height: 46px; }
   .part-qty { font-size: 28px; }
 }
 
@@ -398,7 +401,7 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
 <body>
   <div id="app"></div>
   <script>
-const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.2' }
+const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.3' }
 const KEY = 'vendor-inventory-v1'
 const SITE_KEY = 'vendor-inventory-v1-site'
 const JSON_NAME = 'Vendor Inventory v1.json'
@@ -432,6 +435,8 @@ const ui = {
   ticket: '',
   ticketNote: '',
   focusTicket: false,
+  vendorNew: false,
+  focusVendor: '',
   fileNote: typeof window.showDirectoryPicker === 'function' ? FILE_BROWSER : FILE_EXPORT,
   fileAction: typeof window.showDirectoryPicker === 'function' ? 'choose' : '',
 }
@@ -1006,6 +1011,34 @@ function siteBar(site) {
   </div></div>`
 }
 
+function vendorNames() {
+  const seen = new Map()
+  for (const item of db.items) {
+    const name = (item.vendor || '').trim()
+    if (!name) continue
+    const key = name.toLowerCase()
+    if (!seen.has(key)) seen.set(key, name)
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+}
+
+function vendorField(id, value, adding) {
+  const names = vendorNames()
+  if (names.length === 0) {
+    return `<label class="field"><span>Vendor</span><input id="${id}" value="${esc(value)}" maxlength="120" placeholder="Vendor name"></label>`
+  }
+  const selected = adding ? '__new__' : (names.find((name) => name.toLowerCase() === String(value || '').trim().toLowerCase()) || '')
+  const options = names.map((name) => `<option value="${esc(name)}"${name === selected ? ' selected' : ''}>${esc(name)}</option>`).join('')
+  return `<label class="field"><span>Vendor</span>
+    <select id="${id}-pick">
+      <option value=""${!selected ? ' selected' : ''}>Choose a vendor</option>
+      ${options}
+      <option value="__new__"${adding ? ' selected' : ''}>Add new vendor</option>
+    </select>
+    ${adding ? `<input id="${id}" class="vendor-new" value="${esc(value)}" maxlength="120" placeholder="New vendor name">` : `<input id="${id}" type="hidden" value="${esc(selected)}">`}
+  </label>`
+}
+
 function resultBlock() {
   const result = ui.result
   if (result.kind === 'ok') {
@@ -1057,7 +1090,7 @@ function resultBlock() {
       <p class="hint">Each barcode is one item. Use the same description or model number for matching parts so they group on the list.</p>
       <label class="field"><span>What is it?</span><input id="part-description" value="${esc(ui.fields.description)}" maxlength="200"></label>
       <label class="field"><span>Model number</span><input id="part-model" value="${esc(ui.fields.model)}" maxlength="80"></label>
-      <label class="field"><span>Vendor</span><input id="part-vendor" value="${esc(ui.fields.vendor)}" maxlength="120"></label>
+      ${vendorField('part-vendor', ui.fields.vendor, ui.vendorNew)}
       ${ui.formError ? `<p class="form-error">${esc(ui.formError)}</p>` : ''}
       <div class="row-actions">
         <button class="btn receive" type="submit">Save and add to inventory</button>
@@ -1092,7 +1125,7 @@ function shelfBlock(site) {
       return `<article class="part editing"><form class="edit-part" data-action="save-edit">
         <label class="field"><span>What is it?</span><input id="edit-description" value="${esc(ui.edit.description)}" maxlength="200"></label>
         <label class="field"><span>Model number</span><input id="edit-model" value="${esc(ui.edit.model)}" maxlength="80"></label>
-        <label class="field"><span>Vendor</span><input id="edit-vendor" value="${esc(ui.edit.vendor)}" maxlength="120"></label>
+        ${vendorField('edit-vendor', ui.edit.vendor, ui.vendorNew)}
         ${ui.formError ? `<p class="form-error">${esc(ui.formError)}</p>` : ''}
         <div class="row-actions"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-action="cancel-edit">Cancel</button></div>
       </form></article>`
@@ -1105,7 +1138,7 @@ function shelfBlock(site) {
     </div><p class="part-qty">${group.count}</p></article>`
   }).join('')
   return `${latestHtml}<section class="shelf">
-    <div class="shelf-head"><div><h2>On hand at ${esc(site.name)}</h2>${canClear ? '<div class="row-actions downloads"><button type="button" class="btn ghost" data-action="clear">Clear inventory</button></div>' : ''}</div>
+    <div class="shelf-head"><div><h2>On hand at ${esc(site.name)}</h2>${canClear ? '<button type="button" class="link warn" data-action="clear">Clear inventory</button>' : ''}</div>
       ${rows.length > 0 ? `<label class="field search-field"><span>Find</span><input id="find" value="${esc(ui.query)}" placeholder="Vendor, part, or barcode"></label>` : ''}
     </div>
     ${clearHtml}${removeHtml}
@@ -1191,6 +1224,11 @@ function render() {
     ui.focusTicket = false
     return
   }
+  if (ui.focusVendor && document.getElementById(ui.focusVendor)) {
+    document.getElementById(ui.focusVendor).focus()
+    ui.focusVendor = ''
+    return
+  }
   const prefer = document.getElementById('part-description')
     || document.getElementById('edit-description')
     || document.getElementById('site-name')
@@ -1258,6 +1296,15 @@ document.addEventListener('change', (event) => {
   } else if (el.id === 'sort') {
     ui.sort = el.value === 'description' ? 'description' : 'vendor'
     render()
+  } else if (el.id === 'part-vendor-pick' || el.id === 'edit-vendor-pick') {
+    const pick = el.value
+    const adding = pick === '__new__'
+    ui.vendorNew = adding
+    const next = adding ? '' : pick
+    if (el.id === 'part-vendor-pick') ui.fields.vendor = next
+    else if (ui.edit) ui.edit.vendor = next
+    ui.focusVendor = adding ? (el.id === 'part-vendor-pick' ? 'part-vendor' : 'edit-vendor') : ''
+    render()
   } else if (el.id === 'import-file') {
     const file = el.files && el.files[0]
     el.value = ''
@@ -1307,6 +1354,7 @@ document.addEventListener('submit', (event) => {
     if (result.code === 'need_details') {
       ui.result = { kind: 'need_details', barcode: code }
       ui.fields = { description: '', model: '', vendor: '' }
+      ui.vendorNew = false
       ui.formError = ''
       beep('ask')
     } else if (result.code === 'confirm_return') {
@@ -1425,6 +1473,7 @@ document.addEventListener('click', (event) => {
     const group = groupProducts(shelfRows(ui.siteId)).find((item) => item.key === button.dataset.key)
     if (!group) return
     ui.edit = { key: group.key, itemIds: group.rows.map((row) => row.itemId), description: group.description, model: group.model, vendor: group.vendor }
+    ui.vendorNew = false
     ui.formError = ''
     render()
   } else if (action === 'cancel-edit') {

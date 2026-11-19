@@ -114,13 +114,14 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 }
 
 .btn {
-  border: 2px solid var(--navy);
+  border: 1px solid var(--navy);
   background: var(--navy);
   color: white;
   border-radius: 4px;
-  min-height: 46px;
-  padding: 0 16px;
-  font-weight: 650;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 14px;
+  font-weight: 600;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -179,14 +180,14 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 }
 
 .mode-btn {
-  min-height: 76px;
+  min-height: 52px;
   border-radius: 4px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: transparent;
   text-align: left;
-  padding: 12px 14px;
-  font-size: 22px;
-  font-weight: 700;
+  padding: 8px 12px;
+  font-size: 16px;
+  font-weight: 650;
 }
 
 .mode-btn small {
@@ -221,13 +222,13 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
 
 .barcode-input {
   font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 28px;
-  height: 72px;
-  padding: 0 14px;
+  font-size: 22px;
+  height: 46px;
+  padding: 0 12px;
 }
 
-.qty-field input { height: 72px; font-size: 28px; text-align: center; }
-.btn-scan { height: 72px; white-space: nowrap; }
+.qty-field input { height: 46px; font-size: 22px; text-align: center; }
+.btn-scan { height: 46px; min-height: 46px; padding: 0 14px; white-space: nowrap; }
 
 .mono { font-family: Consolas, "Cascadia Mono", monospace; }
 
@@ -330,6 +331,8 @@ input[type="text"], input[type="month"], input:not([type]), select, .barcode-inp
   text-decoration: underline;
   font-size: 13px;
 }
+.link.warn { color: var(--bad); }
+.vendor-new { margin-top: 8px; }
 
 .edit-part { display: flex; flex-direction: column; gap: 10px; }
 .ticket-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 12px 0; }
@@ -368,7 +371,7 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
   .mode, .scan-row, .latest li { grid-template-columns: 1fr; }
   .shelf-head, .report-head, .site-pick, .site-edit { display: flex; flex-direction: column; align-items: stretch; }
   .topbar h1 { font-size: 22px; }
-  .btn-scan, .barcode-input, .qty-field input { height: 64px; }
+  .btn-scan, .barcode-input, .qty-field input { height: 46px; }
   .part-qty { font-size: 28px; }
 }
 

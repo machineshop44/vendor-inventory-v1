@@ -8,6 +8,7 @@ import {
   createSite,
   dbPath,
   listSites,
+  listVendors,
   clearInventory,
   deleteSite,
   exportData,
@@ -81,6 +82,8 @@ app.use(express.json({ limit: '4mb' }))
 app.get('/api/share', send(() => ({ urls: shareUrls(port).filter((url) => !url.includes('127.0.0.1')) })))
 
 app.get('/api/sites', send(() => listSites()))
+
+app.get('/api/vendors', send(() => listVendors()))
 
 app.get('/api/data-file', send(() => ({ folder: path.dirname(sheetPath), json: jsonPath, sheet: sheetPath })))
 
