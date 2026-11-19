@@ -249,7 +249,9 @@ function DataBar({ hasData, onImport }: { hasData: boolean, onImport: (data: unk
       {error && <p className="form-error">{error}</p>}
       <p className="file-note">
         Every scan is saved on this computer. A refresh keeps the list.
-        {sheetPath ? ` Excel copy: ${sheetPath}` : ''}
+        {sheetPath
+          ? ` The Excel file is created in My Documents: ${sheetPath}`
+          : ' The Excel file is created in My Documents.'}
       </p>
     </div>
   )

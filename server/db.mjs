@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -8,9 +10,31 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dataDir = path.join(root, 'data')
 fs.mkdirSync(dataDir, { recursive: true })
 
+function documentsDir() {
+  if (process.platform === 'win32') {
+    try {
+      const output = execFileSync('reg', [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders',
+        '/v',
+        'Personal',
+      ], { encoding: 'utf8', windowsHide: true, timeout: 5000 })
+      const match = /Personal\s+REG_\w+\s+(.+)/i.exec(output)
+      const folder = match?.[1]?.trim()
+      if (folder) return folder
+    } catch {
+      // Use the usual Documents folder when the shell path cannot be read.
+    }
+  }
+  return path.join(os.homedir(), 'Documents')
+}
+
+const documents = documentsDir()
+fs.mkdirSync(documents, { recursive: true })
+
 export const dbPath = path.join(dataDir, 'inventory.db')
-export const jsonPath = path.join(dataDir, DATA_JSON)
-export const sheetPath = path.join(dataDir, DATA_SHEET)
+export const jsonPath = path.join(documents, DATA_JSON)
+export const sheetPath = path.join(documents, DATA_SHEET)
 
 const db = new DatabaseSync(dbPath)
 db.exec('PRAGMA foreign_keys = ON')
@@ -698,6 +722,7 @@ export function reportCsv(query) {
 }
 
 export function saveDataFiles() {
+  fs.mkdirSync(path.dirname(jsonPath), { recursive: true })
   const data = exportData()
   const json = `${JSON.stringify(data, null, 2)}\n`
   const sheet = workbookXml(data)
@@ -711,18 +736,26 @@ export function saveDataFiles() {
   fs.renameSync(sheetTemp, sheetPath)
 }
 
+function readBackup(file) {
+  if (!fs.existsSync(file)) return null
+  try {
+    const payload = JSON.parse(fs.readFileSync(file, 'utf8'))
+    if (!Array.isArray(payload?.sites) || payload.sites.length === 0) return null
+    return payload
+  } catch (err) {
+    console.error(`The data file was not loaded: ${file}`)
+    console.error(err)
+    return null
+  }
+}
+
 function restoreDataFile() {
   const count = db.prepare('SELECT COUNT(*) AS n FROM sites').get()
-  if (Number(count.n) > 0 || !fs.existsSync(jsonPath)) return
-  try {
-    const payload = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-    if (!Array.isArray(payload?.sites) || payload.sites.length === 0) return
-    importData(payload)
-    console.log(`Restored inventory from ${jsonPath}`)
-  } catch (err) {
-    console.error(`The data file was not loaded: ${jsonPath}`)
-    console.error(err)
-  }
+  if (Number(count.n) > 0) return
+  const payload = readBackup(jsonPath) ?? readBackup(path.join(dataDir, DATA_JSON))
+  if (!payload) return
+  importData(payload)
+  console.log(`Restored inventory from ${jsonPath}`)
 }
 
 restoreDataFile()
