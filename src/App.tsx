@@ -216,7 +216,7 @@ function DataBar({ hasData, onImport }: { hasData: boolean, onImport: (data: unk
     <div className="data-bar no-print">
       <a className="btn ghost" href="/api/export">Export data</a>
       <button type="button" className="btn ghost" onClick={() => inputRef.current?.click()}>Import data</button>
-      <a className="btn ghost" href="/vendor-inventory-v1.html" download={`${APP_TITLE}.html`}>Download app</a>
+      <a className="btn ghost" href={`/vendor-inventory-v${APP.semver}.html`} download={`${APP_TITLE}.html`}>Download app</a>
       <input
         ref={inputRef}
         className="file-input"

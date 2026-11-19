@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -116,9 +116,20 @@ app.patch('/api/movements/:id', send((req) => setTicket(req.params.id, req.body?
 
 app.patch('/api/items/:id', send((req) => updateItem(req.params.id, req.body ?? {}), { persist: true }))
 
-app.get('/vendor-inventory-v1.html', (_req, res) => {
-  res.sendFile(path.join(root, 'Vendor Inventory v1.html'))
-})
+const portableName = `${buildName}.html`
+const portablePath = path.join(root, portableName)
+
+function sendPortableApp(_req, res) {
+  if (!existsSync(portablePath)) {
+    res.status(404).type('text/plain').send(`The app file ${portableName} is not in the project folder.`)
+    return
+  }
+  res.setHeader('Content-Disposition', `inline; filename="${portableName}"`)
+  res.sendFile(portablePath)
+}
+
+app.get(`/vendor-inventory-v${build}.html`, sendPortableApp)
+app.get('/vendor-inventory-v1.html', sendPortableApp)
 
 app.get('/api/inventory.csv', send((req, res) => {
   const data = inventoryCsv(scopeQuery(req))
