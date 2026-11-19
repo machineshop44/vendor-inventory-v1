@@ -221,7 +221,7 @@ export function exportData() {
   return {
     app: 'Vendor Inventory',
     versionLabel: 'v1',
-    semver: '1.3.1',
+    semver: '1.3.2',
     exportedAt: nowLocal(),
     sites: db.prepare('SELECT id, name, created_at FROM sites ORDER BY id').all().map((row) => ({
       id: row.id,

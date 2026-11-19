@@ -1,74 +1,56 @@
-import { formatMonth } from './format.ts'
 import type { Report } from './types.ts'
 import { APP_TITLE } from './version.ts'
 
-function esc(value: string | number) {
-  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  }[ch] ?? ch))
+function xmlText(value: string | number) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&apos;',
+    }[ch] ?? ch))
 }
 
-export function downloadPrint(report: Report, kind: 'inventory' | 'month') {
+function cell(value: string | number, kind?: 'number') {
+  if (kind === 'number' && Number.isFinite(Number(value))) {
+    return `<Cell><Data ss:Type="Number">${Number(value)}</Data></Cell>`
+  }
+  return `<Cell><Data ss:Type="String">${xmlText(value)}</Data></Cell>`
+}
+
+function worksheet(name: string, headers: string[], rows: { value: string | number, kind?: 'number' }[][]) {
+  const head = `<Row>${headers.map((header) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${xmlText(header)}</Data></Cell>`).join('')}</Row>`
+  const body = rows.map((row) => `<Row>${row.map((entry) => cell(entry.value, entry.kind)).join('')}</Row>`).join('')
+  return `<Worksheet ss:Name="${xmlText(name)}"><Table>${head}${body}</Table></Worksheet>`
+}
+
+export function downloadReport(report: Report, kind: 'inventory' | 'month') {
   const rows = kind === 'inventory' ? report.rows.filter((row) => row.endOnHand !== 0) : report.rows
-  const heading = `${formatMonth(report.month)} · ${report.siteName}`
-  const organized = report.sort === 'description' ? 'description' : 'vendor name'
-  const note = `${heading} · ${rows.length} lines · Organized by ${organized}`
-  const body = rows.map((row) => `<tr>
-    <td>${esc(row.site)}</td>
-    <td>${esc(row.vendor)}</td>
-    <td>${esc(row.model)}</td>
-    <td class="mono">${esc(row.barcode)}</td>
-    <td>${esc(row.description)}</td>
-    <td class="num">${row.startOnHand}</td>
-    <td class="num">${row.received}</td>
-    <td class="num">${row.used}</td>
-    <td class="num">${row.endOnHand}</td>
-  </tr>`).join('')
-  const empty = rows.length === 0
-    ? `<p class="empty">Nothing was on hand and nothing moved in ${esc(formatMonth(report.month))} at ${esc(report.siteName)}.</p>`
-    : ''
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>${APP_TITLE} · ${esc(heading)}</title>
-  <style>
-    body { margin: 24px; color: #1a1a1a; font-family: "Segoe UI", sans-serif; font-size: 16px; line-height: 1.4; }
-    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; letter-spacing: -0.03em; }
-    h2 { margin: 0 0 8px; font-size: 22px; font-weight: 650; }
-    .quiet, .empty { color: #5c6570; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 8px; border-bottom: 1px solid #d5d8de; text-align: left; vertical-align: baseline; }
-    th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5c6570; }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: Consolas, "Cascadia Mono", monospace; }
-    .mono { font-family: Consolas, "Cascadia Mono", monospace; }
-  </style>
-</head>
-<body>
-  <h1>${APP_TITLE}</h1>
-  <h2>${esc(heading)}</h2>
-  ${empty || `<p class="quiet">${esc(note)}</p>`}
-  ${rows.length === 0 ? '' : `<table>
-    <thead>
-      <tr>
-        <th>Site</th><th>Vendor</th><th>Model</th><th>Barcode</th><th>Description</th>
-        <th class="num">Started with</th><th class="num">Received</th><th class="num">Used</th><th class="num">On hand</th>
-      </tr>
-    </thead>
-    <tbody>${body}</tbody>
-  </table>`}
-</body>
-</html>
+  const sheetRows = rows.map((row) => [
+    { value: row.site },
+    { value: row.vendor },
+    { value: row.model },
+    { value: row.barcode },
+    { value: row.description },
+    { value: row.startOnHand, kind: 'number' as const },
+    { value: row.received, kind: 'number' as const },
+    { value: row.used, kind: 'number' as const },
+    { value: row.endOnHand, kind: 'number' as const },
+  ])
+  const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="Header"><Font ss:Bold="1"/></Style></Styles>
+${worksheet(kind === 'inventory' ? 'On hand' : 'Month', ['Site', 'Vendor', 'Model', 'Barcode', 'Description', 'Started with', 'Received', 'Used', 'On hand'], sheetRows)}
+</Workbook>
 `
   const slug = report.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'site'
   const filename = kind === 'inventory'
-    ? `${APP_TITLE} on hand ${slug} ${report.month}.html`
-    : `${APP_TITLE} ${slug} ${report.month}.html`
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    ? `${APP_TITLE} on hand ${slug} ${report.month}.xls`
+    : `${APP_TITLE} ${slug} ${report.month}.xls`
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

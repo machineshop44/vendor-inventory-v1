@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Vendor Inventory v1.3.1. Scan parts into inventory and scan them again when they are used.">
-  <title>Vendor Inventory v1.3.1</title>
+  <meta name="description" content="Vendor Inventory v1.3.2. Scan parts into inventory and scan them again when they are used.">
+  <title>Vendor Inventory v1.3.2</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23012169'/%3E%3Crect y='26' width='32' height='6' fill='%23e31837'/%3E%3C/svg%3E">
   <style>
 :root {
@@ -398,7 +398,7 @@ td.num { font-family: Consolas, "Cascadia Mono", monospace; }
 <body>
   <div id="app"></div>
   <script>
-const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.1' }
+const APP = { displayName: 'Vendor Inventory', versionLabel: 'v1', semver: '1.3.2' }
 const KEY = 'vendor-inventory-v1'
 const SITE_KEY = 'vendor-inventory-v1-site'
 const JSON_NAME = 'Vendor Inventory v1.json'
@@ -812,46 +812,25 @@ function reportRows(siteId, month) {
   return rows
 }
 
-function printDocument(report, kind) {
+function reportWorkbook(report, kind) {
   const rows = kind === 'inventory' ? report.rows.filter((row) => row.endOnHand !== 0) : report.rows
-  const heading = `${formatMonth(report.month)} · ${report.siteName}`
-  const organized = report.sort === 'description' ? 'description' : 'vendor name'
-  const note = `${heading} · ${rows.length} lines · Organized by ${organized}`
-  const body = rows.map((row) => `<tr>
-    <td>${esc(row.site)}</td><td>${esc(row.vendor)}</td><td>${esc(row.model)}</td>
-    <td class="mono">${esc(row.barcode)}</td><td>${esc(row.description)}</td>
-    <td class="num">${row.startOnHand}</td><td class="num">${row.received}</td><td class="num">${row.used}</td><td class="num">${row.endOnHand}</td>
-  </tr>`).join('')
-  const empty = rows.length === 0
-    ? `<p class="empty">Nothing was on hand and nothing moved in ${esc(formatMonth(report.month))} at ${esc(report.siteName)}.</p>`
-    : ''
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Vendor Inventory v${APP.semver} · ${esc(heading)}</title>
-  <style>
-    body { margin: 24px; color: #1a1a1a; font-family: "Segoe UI", sans-serif; font-size: 16px; line-height: 1.4; }
-    h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; }
-    h2 { margin: 0 0 8px; font-size: 22px; font-weight: 650; }
-    .quiet, .empty { color: #5c6570; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 8px; border-bottom: 1px solid #d5d8de; text-align: left; vertical-align: baseline; }
-    th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #5c6570; }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: Consolas, "Cascadia Mono", monospace; }
-    .mono { font-family: Consolas, "Cascadia Mono", monospace; }
-  </style>
-</head>
-<body>
-  <h1>Vendor Inventory v${APP.semver}</h1>
-  <h2>${esc(heading)}</h2>
-  ${empty || `<p class="quiet">${esc(note)}</p>`}
-  ${rows.length === 0 ? '' : `<table><thead><tr>
-    <th>Site</th><th>Vendor</th><th>Model</th><th>Barcode</th><th>Description</th>
-    <th class="num">Started with</th><th class="num">Received</th><th class="num">Used</th><th class="num">On hand</th>
-  </tr></thead><tbody>${body}</tbody></table>`}
-</body>
-</html>
+  const data = rows.map((row) => [
+    { value: row.site },
+    { value: row.vendor },
+    { value: row.model },
+    { value: row.barcode },
+    { value: row.description },
+    { value: row.startOnHand, kind: 'number' },
+    { value: row.received, kind: 'number' },
+    { value: row.used, kind: 'number' },
+    { value: row.endOnHand, kind: 'number' },
+  ])
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="Header"><Font ss:Bold="1"/></Style></Styles>
+${sheet(kind === 'inventory' ? 'On hand' : 'Month', ['Site', 'Vendor', 'Model', 'Barcode', 'Description', 'Started with', 'Received', 'Used', 'On hand'], data)}
+</Workbook>
 `
 }
 
@@ -1166,14 +1145,14 @@ function reportPage(site) {
       ${rows.map((row) => `<tr><td>${esc(row.site)}</td><td>${esc(row.vendor)}</td><td>${esc(row.model)}</td><td class="mono">${esc(row.barcode)}</td><td>${esc(row.description)}</td><td class="num">${row.startOnHand}</td><td class="num">${row.received}</td><td class="num">${row.used}</td><td class="num">${row.endOnHand}</td></tr>`).join('')}
       </tbody></table></div>`
   return `<section class="report"><div class="report-head no-print"><div><h2>Monthly report</h2>
-      <p class="hint">On hand, what came in, and what was used. This comes from the scans.${allSites ? ' All sites stay organized by vendor name.' : ''}</p></div>
+      <p class="hint">On hand, what came in, and what was used. Excel downloads can be kept and opened later. Print uses this page.${allSites ? ' All sites stay organized by vendor name.' : ''}</p></div>
       <div class="report-controls">
         <label class="field"><span>Month</span><input id="month" type="month" value="${esc(ui.month)}"></label>
         <label class="field"><span>Site</span><select id="report-site">${allSites ? '<option value="">All sites</option>' : ''}${options}</select></label>
         <button type="button" class="btn ghost" aria-pressed="${allSites}" data-action="all-sites">All sites</button>
         <label class="field"><span>Sort</span><select id="sort" ${allSites ? 'disabled' : ''}><option value="vendor"${sort === 'vendor' ? ' selected' : ''}>Vendor name</option><option value="description"${sort === 'description' ? ' selected' : ''}>Description</option></select></label>
-        <button type="button" class="btn ghost" data-action="download-inventory">Download inventory</button>
-        <button type="button" class="btn ghost" data-action="download-month">Download month</button>
+        <button type="button" class="btn ghost" data-action="download-inventory">Excel inventory</button>
+        <button type="button" class="btn ghost" data-action="download-month">Excel month</button>
         <button type="button" class="btn ghost" data-action="print">Print</button>
       </div></div>
     <h2 class="print-only">${esc(formatMonth(ui.month))} · ${esc(scopeName)}</h2>
@@ -1507,9 +1486,9 @@ document.addEventListener('click', (event) => {
     const report = { month: ui.month, siteName, sort, rows }
     const kind = action === 'download-inventory' ? 'inventory' : 'month'
     const filename = kind === 'inventory'
-      ? `Vendor Inventory v${APP.semver} on hand ${name || 'site'} ${ui.month}.html`
-      : `Vendor Inventory v${APP.semver} ${name || 'site'} ${ui.month}.html`
-    download(filename, printDocument(report, kind), 'text/html;charset=utf-8')
+      ? `Vendor Inventory v${APP.semver} on hand ${name || 'site'} ${ui.month}.xls`
+      : `Vendor Inventory v${APP.semver} ${name || 'site'} ${ui.month}.xls`
+    download(filename, reportWorkbook(report, kind), 'application/vnd.ms-excel')
   } else if (action === 'print') {
     window.print()
   }

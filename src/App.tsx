@@ -3,7 +3,7 @@ import { ApiError, api } from './lib/api.ts'
 import { beep } from './lib/beep.ts'
 import { currentMonth, formatMonth, formatWhen } from './lib/format.ts'
 import type { Item, Mode, Report, ScanResult, ShelfRow, Site, SiteView, UndoResult } from './lib/types.ts'
-import { downloadPrint } from './lib/print-doc.ts'
+import { downloadReport } from './lib/print-doc.ts'
 import { APP, APP_TITLE } from './lib/version.ts'
 
 const SITE_KEY = 'vendor-inventory-v1-site'
@@ -1107,7 +1107,7 @@ function ReportPage({ site, sites }: { site: Site, sites: Site[] }) {
         <div>
           <h2>Monthly report</h2>
           <p className="hint">
-            On hand, what came in, and what was used. This comes from the scans.
+            On hand, what came in, and what was used. Excel downloads can be kept and opened later. Print uses this page.
             {allSites ? ' All sites stay organized by vendor name.' : ''}
           </p>
         </div>
@@ -1142,8 +1142,8 @@ function ReportPage({ site, sites }: { site: Site, sites: Site[] }) {
               <option value="description">Description</option>
             </select>
           </label>
-          <button type="button" className="btn ghost" disabled={!data} onClick={() => data && downloadPrint(data, 'inventory')}>Download inventory</button>
-          <button type="button" className="btn ghost" disabled={!data} onClick={() => data && downloadPrint(data, 'month')}>Download month</button>
+          <button type="button" className="btn ghost" disabled={!data} onClick={() => data && downloadReport(data, 'inventory')}>Excel inventory</button>
+          <button type="button" className="btn ghost" disabled={!data} onClick={() => data && downloadReport(data, 'month')}>Excel month</button>
           <button type="button" className="btn ghost" onClick={() => window.print()}>Print</button>
         </div>
       </div>
