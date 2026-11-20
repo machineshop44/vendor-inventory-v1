@@ -101,6 +101,38 @@ ${sheet('Items', ['Barcode', 'Description', 'Model', 'Vendor'], itemRows.map((ro
     { value: row.vendor },
   ]))}
 ${sheet('Sites', ['Site'], siteRows.map((row) => [{ value: row.name }]))}
+${databaseSheet(data)}
 </Workbook>
 `
+}
+
+function databaseSheet(data) {
+  const json = JSON.stringify(data)
+  const rows = []
+  for (let index = 0; index < json.length || rows.length === 0; index += 30000) {
+    rows.push(`<Row><Cell><Data ss:Type="String">${xmlText(json.slice(index, index + 30000))}</Data></Cell></Row>`)
+    if (index + 30000 >= json.length) break
+  }
+  return `<Worksheet ss:Name="Database"><Table>${rows.join('')}</Table></Worksheet>`
+}
+
+function xmlUnescape(value) {
+  return value
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+}
+
+export function readWorkbookDatabase(xml) {
+  const sheetMatch = String(xml).match(/<Worksheet\b[^>]*ss:Name="Database"[^>]*>[\s\S]*?<\/Worksheet>/)
+  if (!sheetMatch) return null
+  const parts = [...sheetMatch[0].matchAll(/<Data ss:Type="String">([\s\S]*?)<\/Data>/g)]
+    .map((match) => xmlUnescape(match[1]))
+  const json = parts.join('')
+  if (!json.startsWith('{')) return null
+  const payload = JSON.parse(json)
+  if (!payload || payload.app !== 'Vendor Inventory' || !Array.isArray(payload.sites)) return null
+  return payload
 }

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
-import { DATA_JSON, DATA_SHEET, workbookXml } from './workbook.mjs'
+import { DATA_JSON, DATA_SHEET, readWorkbookDatabase, workbookXml } from './workbook.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dataDir = path.join(root, 'data')
@@ -230,7 +230,7 @@ export function exportData() {
   return {
     app: 'Vendor Inventory',
     versionLabel: 'v1',
-    semver: '1.3.3',
+    semver: '1.3.4',
     exportedAt: nowLocal(),
     sites: db.prepare('SELECT id, name, created_at FROM sites ORDER BY id').all().map((row) => ({
       id: row.id,
@@ -730,19 +730,29 @@ export function reportCsv(query) {
   return `\uFEFF${lines.join('\r\n')}\r\n`
 }
 
+function replaceFile(temp, dest) {
+  const backup = `${dest}.bak`
+  try {
+    fs.rmSync(backup, { force: true })
+    if (fs.existsSync(dest)) fs.renameSync(dest, backup)
+    fs.renameSync(temp, dest)
+    fs.rmSync(backup, { force: true })
+  } catch (err) {
+    if (!fs.existsSync(dest) && fs.existsSync(backup)) fs.renameSync(backup, dest)
+    fs.rmSync(temp, { force: true })
+    throw err
+  }
+}
+
 export function saveDataFiles() {
   fs.mkdirSync(path.dirname(jsonPath), { recursive: true })
   const data = exportData()
-  const json = `${JSON.stringify(data, null, 2)}\n`
-  const sheet = workbookXml(data)
   const jsonTemp = `${jsonPath}.tmp`
   const sheetTemp = `${sheetPath}.tmp`
-  fs.writeFileSync(jsonTemp, json)
-  fs.writeFileSync(sheetTemp, sheet)
-  fs.rmSync(jsonPath, { force: true })
-  fs.rmSync(sheetPath, { force: true })
-  fs.renameSync(jsonTemp, jsonPath)
-  fs.renameSync(sheetTemp, sheetPath)
+  fs.writeFileSync(jsonTemp, `${JSON.stringify(data, null, 2)}\n`)
+  fs.writeFileSync(sheetTemp, workbookXml(data))
+  replaceFile(jsonTemp, jsonPath)
+  replaceFile(sheetTemp, sheetPath)
 }
 
 function readBackup(file) {
@@ -758,13 +768,26 @@ function readBackup(file) {
   }
 }
 
+function readSheetBackup() {
+  if (!fs.existsSync(sheetPath)) return null
+  try {
+    const payload = readWorkbookDatabase(fs.readFileSync(sheetPath, 'utf8'))
+    if (!Array.isArray(payload?.sites) || payload.sites.length === 0) return null
+    return payload
+  } catch (err) {
+    console.error(`The Excel file was not loaded: ${sheetPath}`)
+    console.error(err)
+    return null
+  }
+}
+
 function restoreDataFile() {
   const count = db.prepare('SELECT COUNT(*) AS n FROM sites').get()
   if (Number(count.n) > 0) return
-  const payload = readBackup(jsonPath) ?? readBackup(path.join(dataDir, DATA_JSON))
+  const payload = readBackup(jsonPath) ?? readBackup(path.join(dataDir, DATA_JSON)) ?? readSheetBackup()
   if (!payload) return
   importData(payload)
-  console.log(`Restored inventory from ${jsonPath}`)
+  console.log(`Restored inventory into ${sheetPath}`)
 }
 
 restoreDataFile()

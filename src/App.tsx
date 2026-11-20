@@ -250,8 +250,8 @@ function DataBar({ hasData, onImport }: { hasData: boolean, onImport: (data: unk
       <p className="file-note">
         Every scan is saved on this computer. A refresh keeps the list.
         {sheetPath
-          ? ` The Excel file is created in My Documents: ${sheetPath}`
-          : ' The Excel file is created in My Documents.'}
+          ? ` The inventory Excel file is in My Documents and is created again if it is missing: ${sheetPath}`
+          : ' The inventory Excel file is created in My Documents.'}
       </p>
     </div>
   )
